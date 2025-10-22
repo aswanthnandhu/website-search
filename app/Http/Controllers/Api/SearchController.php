@@ -198,7 +198,6 @@ class SearchController extends Controller
                     'id' => $log->id,
                     'query' => $log->query,
                     'user_id' => $log->user_id,
-                    'user_name' => $log->user ? $log->user->name : null,
                     'created_at' => $log->created_at,
                 ]);
         }

@@ -19,4 +19,8 @@ class SearchLog extends Model
             'created_at' => $this->created_at?->toDateTimeString(),
         ];
     }
+    public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id'); // specify foreign key if needed
+    }
 }
