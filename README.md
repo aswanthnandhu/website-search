@@ -1,64 +1,226 @@
-# website-search
-searchingwebsite
+# Unified Search Controller - README
 
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+This controller provides a **single API endpoint** to perform a website-wide search across multiple content types, including **Products, Blog Posts, Pages, and FAQs**. It also includes endpoints for typeahead suggestions, search logs, and analytics for admin users.
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+---
 
-## About Laravel
+## ⚙️ Setup Instructions
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+This project supports **local** and **Docker** environments, with **MeiliSearch** used for full-text indexing.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+### 1. Clone & Install Dependencies
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+```bash
+git clone <repo-url>
+cd project
+composer install
+cp .env.example .env
+php artisan key:generate
+```
 
-## Learning Laravel
+### 2. Docker Setup (Recommended)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+```bash
+docker-compose build app
+docker-compose up -d
+```
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+This starts the following services:
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+* `app` (Laravel)
+* `meilisearch`
+* `mysql`
 
-## Laravel Sponsors
+### 3. Configure Scout + MeiliSearch
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+In `.env`:
 
-### Premium Partners
+```env
+SCOUT_DRIVER=meilisearch
+MEILISEARCH_HOST=http://meilisearch:7700
+```
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+### 4. Run Migrations & Seed Data
 
-## Contributing
+```bash
+docker-compose exec app php artisan migrate --seed
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+### 5. Index Data
 
-## Code of Conduct
+```bash
+docker-compose exec app php artisan scout:import "App\Models\Product"
+docker-compose exec app php artisan scout:import "App\Models\Blog"
+docker-compose exec app php artisan scout:import "App\Models\Page"
+docker-compose exec app php artisan scout:import "App\Models\Faq"
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+---
 
-## Security Vulnerabilities
+## 🔍 API Endpoints
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### 1. `search()` – Main Unified Search Endpoint
 
-## License
+**Purpose:** Perform a full website-wide search across products, blogs, pages, and FAQs.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**Flow:**
+
+1. Accepts user input via the `q` query parameter.
+2. Stores search activity in the `search_logs` table.
+3. Fetches results individually from `Product`, `BlogPost`, `Page`, and `Faq` models.
+4. Merges all results into a single collection.
+5. Prioritizes exact matches first.
+6. Returns paginated results.
+
+**Key Benefit:** Centralized search in one API call.
+
+---
+
+### 2. `suggestions()` – Typeahead Endpoint
+
+**Purpose:** Provide realtime search suggestions as users type (2+ characters).
+
+**Flow:**
+
+1. Reads partial query string from `q`.
+2. Queries each model using Laravel Scout.
+3. Collects and merges only `title` or `question` fields.
+4. Removes duplicate suggestions.
+5. Limits the number of suggestions returned.
+
+**Key Benefit:** Improves UX with faster, predictive search results.
+
+---
+
+### 3. `logs()` – Search Logs (Admin)
+ `/admin/login`
+
+**Purpose:** Display user search activity.
+
+**Modes:**
+
+* `recent` – latest searches
+* `popular` – most searched keywords (grouped and counted)
+
+**Note:** Admin users are stored in the `users` table. Seeders can prepopulate admin credentials and sample search logs.
+
+---
+
+### 4. `analytics()` – Search Statistics (Admin)
+
+**Purpose:** Provide insights into overall search trends.
+
+**Returns:**
+
+* Total searches
+* Unique queries
+* Searches today and this week
+* Top 10 most searched queries
+* 10 most recent searches
+
+**Benefit:** Helps admins understand user interests and content engagement.
+
+---
+
+## ✅ Feature Summary
+
+| Feature     | Function        | Purpose                                              |
+| ----------- | --------------- | ---------------------------------------------------- |
+| Search      | `search()`      | Unified full search                                  |
+| Suggestions | `suggestions()` | Typeahead / autocomplete                             |
+| Logs        | `logs()`        | Admin – view recent & popular queries (latest first) |
+| Analytics   | `analytics()`   | Admin – statistics & insights                        |
+
+---
+
+## 🧵 Queues & Scheduler (Optional)
+
+Search logging and indexing are automatically handled via **model events**. Whenever a model is **created, updated, or deleted**, the corresponding search index is updated. Additionally, a daily scheduler ensures indexing is refreshed every day.
+
+
+
+## 🔎 Indexing & Search Logic
+
+The application uses **Laravel Scout** with **MeiliSearch** as the backend.
+
+**Indexing Flow:**
+
+1. Data is stored in MySQL when products/blogs/faqs are created.
+2. Scout observes the model (`Searchable` trait).
+3. On save/update/delete, a JSON document is pushed to MeiliSearch automatically.
+4. Daily scheduled indexing ensures consistency.
+5. Queries hit MeiliSearch, not MySQL, for **millisecond-level responses**.
+
+**Searchable Fields by Model:**
+
+| Model   | Indexed Fields              |
+| ------- | --------------------------- |
+| Product | name, description, category |
+| Blog    | title, content              |
+| Page    | title, content              |
+| FAQ     | question, answer            |
+
+**Example `toSearchableArray()` in Product model:**
+
+```php
+public function toSearchableArray()
+{
+    return [
+        'name' => $this->name,
+        'description' => $this->description,
+    ];
+}
+```
+
+**Relevance Ranking by MeiliSearch:**
+
+1. Typo tolerance
+2. Exact match score
+3. Keyword proximity
+4. Attribute importance
+
+---
+
+### 🔍 Sample API Queries
+
+* Unified search: `/api/search?q=iphone`
+* Suggestions: `/api/search/suggestions?q=iph`
+* Logs (popular): `/api/search/logs?type=popular`
+
+**Sample Search Response:**
+
+```json
+{
+    "query": "aut",
+    "current_page": 1,
+    "per_page": 10,
+    "total_results": 139,
+    "data": [
+        {
+            "type": "product",
+            "title": "aut",
+            "snippet": "Eaque ut itaque dolores inventore animi assumenda non.",
+            "link": 2,
+            "created_at": "2025-10-21T18:39:18.000000Z"
+        },
+        {
+            "type": "product",
+            "title": "aut",
+            "snippet": "Minus ex consequatur eos aperiam sed sed id atque voluptatem est veritatis.",
+            "link": 69,
+            "created_at": "2025-10-21T19:17:01.000000Z"
+        }
+    ]
+}
+```
+
+---
+
+### ✅ Key Advantages
+
+* Centralized search across multiple content types.
+* Real-time suggestions for improved UX.
+* Admin analytics to track trends and user behavior (admins stored in `users` table, with latest search logs first).
+* Automatic indexing on create, update, delete, and daily refresh.
+* Optimized full-text search using MeiliSearch.
+* Optional asynchronous processing via queues.

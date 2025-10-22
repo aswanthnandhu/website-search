@@ -15,6 +15,7 @@ Route::middleware(['auth', \App\Http\Middleware\AdminMiddleware::class])->prefix
 });
 Route::prefix('api')->group(function () {
     // Search endpoints
+    Route::get('/search', [SearchController::class, 'search']);
     Route::get('/search/suggestions', [SearchController::class, 'suggestions']);
     Route::get('/search/logs', [SearchController::class, 'logs']);
     Route::get('/search/analytics', [SearchController::class, 'analytics']);
@@ -23,7 +24,6 @@ Route::prefix('api')->group(function () {
 Route::get('/', function () {
     return view('welcome');
 });
-Route::get('/search', [SearchController::class, 'search']);
 
 
 
